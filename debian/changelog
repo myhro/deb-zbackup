@@ -1,0 +1,5 @@
+zbackup (1.2-1) unstable; urgency=low
+
+  * Initial release (Closes: #717443)
+
+ -- Howard Chan <smartboyhw@gmail.com>  Tue, 27 Aug 2013 12:38:22 +0800
