@@ -1,3 +1,12 @@
+zbackup (1.3-1) unstable; urgency=low
+
+  * Upstream added OpenSSL linking exception (closes: #761381).
+  * Remove big-endian-support.patch , this release contains it.
+  * Update Standards-Version to 3.9.6 .
+  * New maintainer (closes: #755773).
+
+ -- Laszlo Boszormenyi (GCS) <gcs@debian.org>  Sun, 12 Oct 2014 10:20:33 +0000
+
 zbackup (1.2-1.1) unstable; urgency=medium
 
   * Non-maintainer upload.
