@@ -1,4 +1,4 @@
-// Copyright (c) 2012-2014 Konstantin Isakov <ikm@zbackup.org>
+// Copyright (c) 2012-2014 Konstantin Isakov <ikm@zbackup.org> and ZBackup contributors, see CONTRIBUTORS
 // Part of ZBackup. Licensed under GNU GPLv2 or later + OpenSSL, see LICENSE
 
 #include <limits.h>
@@ -6,6 +6,13 @@
 #include <unistd.h>
 #include <cerrno>
 #include <cstring>
+#ifdef __APPLE__
+  #include <sys/socket.h>
+#else
+  #include <sys/sendfile.h>
+#endif
+#include <sys/types.h>
+#include <fcntl.h>
 
 #include "file.hh"
 
@@ -38,8 +45,41 @@ void File::erase( std::string const & filename ) throw( exCantErase )
 void File::rename( std::string const & from,
                    std::string const & to ) throw( exCantRename )
 {
-  if ( ::rename( from.c_str(), to.c_str() ) != 0 )
-    throw exCantRename( from + " to " + to );
+  int res = 0;
+  res = ::rename( from.c_str(), to.c_str() );
+  if ( 0 != res )
+  {
+    if ( EXDEV == errno )
+    {
+      int read_fd;
+      int write_fd;
+      struct stat stat_buf;
+      off_t offset = 0;
+
+      /* Open the input file. */
+      read_fd = ::open( from.c_str(), O_RDONLY );
+      /* Stat the input file to obtain its size. */
+      fstat( read_fd, &stat_buf );
+      /* Open the output file for writing, with the same permissions as the
+       source file. */
+      write_fd = ::open( to.c_str(), O_WRONLY | O_CREAT, stat_buf.st_mode );
+      /* Blast the bytes from one file to the other. */
+      #ifdef __APPLE__
+      if ( -1 == sendfile(write_fd, read_fd, offset, &stat_buf.st_size, NULL, 0) )
+         throw exCantRename( from + " to " + to );
+      #else
+      if ( -1 == sendfile(write_fd, read_fd, &offset, stat_buf.st_size) )
+         throw exCantRename( from + " to " + to );
+      #endif
+
+      /* Close up. */
+      ::close( read_fd );
+      ::close( write_fd );
+      File::erase ( from );
+    }
+    else
+      throw exCantRename( from + " to " + to );
+  }
 }
 
 void File::open( char const * filename, OpenMode mode ) throw( exCantOpen )

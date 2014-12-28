@@ -1,4 +1,4 @@
-// Copyright (c) 2012-2014 Konstantin Isakov <ikm@zbackup.org>
+// Copyright (c) 2012-2014 Konstantin Isakov <ikm@zbackup.org> and ZBackup contributors, see CONTRIBUTORS
 // Part of ZBackup. Licensed under GNU GPLv2 or later + OpenSSL, see LICENSE
 
 #include <stdio.h>
@@ -20,10 +20,10 @@ ChunkIndex::Chain::Chain( ChunkId const & id, Bundle::Id const * bundleId ):
 
 bool ChunkIndex::Chain::equalsTo( ChunkId const & id )
 {
-  return memcmp( cryptoHash, id.cryptoHash, sizeof ( cryptoHash ) ) == 0;
+  return memcmp( cryptoHash, id.cryptoHash, sizeof( cryptoHash ) ) == 0;
 }
 
-void ChunkIndex::loadIndex()
+void ChunkIndex::loadIndex( IndexProcessor & ip )
 {
   Dir::Listing lst( indexPath );
 
@@ -33,44 +33,81 @@ void ChunkIndex::loadIndex()
 
   while( lst.getNext( entry ) )
   {
-    verbosePrintf( "Loading index file %s...\n", entry.getFileName().c_str() );
-
-    IndexFile::Reader reader( key,
-                             Dir::addPath( indexPath, entry.getFileName() ) );
-
-    BundleInfo info;
-    Bundle::Id bundleId;
-    while( reader.readNextRecord( info, bundleId ) )
+    verbosePrintf( "Loading index file %s... ", entry.getFileName().c_str() );
+    try
     {
-      Bundle::Id * savedId = storage.allocateObjects< Bundle::Id >( 1 );
-      memcpy( savedId, &bundleId, sizeof( bundleId ) );
+      string indexFn = Dir::addPath( indexPath, entry.getFileName() );
+      IndexFile::Reader reader( key, indexFn );
 
-      lastBundleId = savedId;
+      ip.startIndex( indexFn );
 
-      ChunkId id;
-
-      for ( int x = info.chunk_record_size(); x--; )
+      BundleInfo info;
+      Bundle::Id bundleId;
+      while( reader.readNextRecord( info, bundleId ) )
       {
-        BundleInfo_ChunkRecord const & record = info.chunk_record( x );
+        Bundle::Id * savedId = storage.allocateObjects< Bundle::Id >( 1 );
+        memcpy( savedId, &bundleId, sizeof( bundleId ) );
 
-        if ( record.id().size() != ChunkId::BlobSize )
-          throw exIncorrectChunkIdSize();
+        ChunkId id;
 
-        id.setFromBlob( record.id().data() );
-        registerNewChunkId( id, savedId );
+        ip.startBundle( *savedId );
+
+        for ( int x = info.chunk_record_size(); x--; )
+        {
+          BundleInfo_ChunkRecord const & record = info.chunk_record( x );
+
+          if ( record.id().size() != ChunkId::BlobSize )
+            throw exIncorrectChunkIdSize();
+
+          id.setFromBlob( record.id().data() );
+          ip.processChunk( id );
+        }
+
+        ip.finishBundle( *savedId, info );
       }
+
+      ip.finishIndex( indexFn );
     }
+    catch( std::exception & e )
+    {
+      fprintf( stderr, "error: %s\n", e.what() );
+      continue;
+    }
+    verbosePrintf( "\n" );
   }
 
   verbosePrintf( "Index loaded.\n" );
 }
 
+void ChunkIndex::startIndex( string const & )
+{
+}
+
+void ChunkIndex::startBundle( Bundle::Id const & bundleId )
+{
+  lastBundleId = &bundleId;
+}
+
+void ChunkIndex::processChunk( ChunkId const & chunkId )
+{
+  registerNewChunkId( chunkId, lastBundleId );
+}
+
+void ChunkIndex::finishBundle( Bundle::Id const &, BundleInfo const & )
+{
+}
+
+void ChunkIndex::finishIndex( string const & )
+{
+}
+
 ChunkIndex::ChunkIndex( EncryptionKey const & key, TmpMgr & tmpMgr,
-                        string const & indexPath ):
+                        string const & indexPath, bool prohibitChunkIndexLoading ):
   key( key ), tmpMgr( tmpMgr ), indexPath( indexPath ), storage( 65536, 1 ),
   lastBundleId( NULL )
 {
-  loadIndex();
+  if ( !prohibitChunkIndexLoading )
+    loadIndex( *this );
 }
 
 Bundle::Id const * ChunkIndex::findChunk( ChunkId::RollingHashPart rollingHash,
