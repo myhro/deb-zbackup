@@ -1,3 +1,2 @@
 version=3
-opts=filenamemangle=s/.+\/v?(\d\S*)\.tar\.gz/zbackup-$1.tar.gz/ \
-  https://github.com/zbackup/zbackup/tags .*/v?(\d\S*)\.tar\.gz
+https://github.com/zbackup/zbackup/tags .*/v?(\d\S*)\.tar\.gz

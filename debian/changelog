@@ -1,3 +1,16 @@
+zbackup (1.4.4-1~bpo8+1) jessie-backports; urgency=medium
+
+  * Rebuild for jessie-backports.
+
+ -- Tiago Ilieve <tiago.myhro@gmail.com>  Sat, 23 Jan 2016 11:38:42 -0200
+
+zbackup (1.4.4-1) unstable; urgency=low
+
+  * New upstream release.
+  * Update watch file.
+
+ -- Laszlo Boszormenyi (GCS) <gcs@debian.org>  Thu, 07 Jan 2016 18:05:48 +0100
+
 zbackup (1.4.1-1) unstable; urgency=medium
 
   * New upstream release.

@@ -196,7 +196,7 @@ void ZExchange::exchange( string const & srcPath, string const & dstPath,
   {
     verbosePrintf( "Searching for bundles...\n" );
 
-    vector< string > bundles = BackupExchanger::recreateDirectories(
+    vector< string > bundles = BackupExchanger::findOrRebuild(
         srcZBackupBase.getBundlesPath(), dstZBackupBase.getBundlesPath() );
 
     for ( std::vector< string >::iterator it = bundles.begin(); it != bundles.end(); ++it )
@@ -232,7 +232,7 @@ void ZExchange::exchange( string const & srcPath, string const & dstPath,
   if ( exchange.test( BackupExchanger::index ) )
   {
     verbosePrintf( "Searching for indicies...\n" );
-    vector< string > indicies = BackupExchanger::recreateDirectories(
+    vector< string > indicies = BackupExchanger::findOrRebuild(
         srcZBackupBase.getIndexPath(), dstZBackupBase.getIndexPath() );
 
     for ( std::vector< string >::iterator it = indicies.begin(); it != indicies.end(); ++it )
@@ -277,7 +277,7 @@ void ZExchange::exchange( string const & srcPath, string const & dstPath,
     BackupInfo backupInfo;
 
     verbosePrintf( "Searching for backups...\n" );
-    vector< string > backups = BackupExchanger::recreateDirectories(
+    vector< string > backups = BackupExchanger::findOrRebuild(
         srcZBackupBase.getBackupsPath(), dstZBackupBase.getBackupsPath() );
 
     for ( std::vector< string >::iterator it = backups.begin(); it != backups.end(); ++it )
@@ -483,7 +483,7 @@ int main( int argc, char *argv[] )
     if ( args.size() < 1 || printHelp )
     {
       fprintf( stderr,
-"ZBackup, a versatile deduplicating backup tool, version 1.4\n"
+"ZBackup, a versatile deduplicating backup tool, version 1.4.3\n"
 "Copyright (c) 2012-2014 Konstantin Isakov <ikm@zbackup.org> and\n"
 "ZBackup contributors\n"
 "Comes with no warranty. Licensed under GNU GPLv2 or later + OpenSSL.\n"
@@ -508,7 +508,8 @@ int main( int argc, char *argv[] )
 "            performs export from source to destination storage;\n"
 "    import <source storage path> <destination storage path> -\n"
 "            performs import from source to destination storage;\n"
-"    gc <storage path> - performs chunk garbage collection.\n"
+"    gc [fast|deep] <storage path> - performs garbage collection.\n"
+"            Default is fast.\n"
 "  For export/import storage path must be valid (initialized) storage.\n"
 "", *argv,
                defaultThreads, defaultCacheSizeMb );
@@ -611,15 +612,42 @@ int main( int argc, char *argv[] )
     else
     if ( strcmp( args[ 0 ], "gc" ) == 0 )
     {
-      // Perform the restore
-      if ( args.size() != 2 )
+      // Perform the garbage collection
+      if ( args.size() < 2 || args.size() > 3 )
       {
-        fprintf( stderr, "Usage: %s gc <backup directory>\n",
-                 *argv );
+        fprintf( stderr, "Usage: %s %s [fast|deep] <storage path>\n",
+                 *argv, args[ 0 ] );
         return EXIT_FAILURE;
       }
-      ZCollector zr( args[ 1 ], passwords[ 0 ], threads, cacheSizeMb * 1048576 );
-      zr.gc();
+
+      int fieldStorage = 1;
+      int fieldAction = 2;
+
+      if ( args.size() == 3 )
+      {
+        fieldStorage = 2;
+        fieldAction = 1;
+      }
+
+      if ( args.size() > 2 && strcmp( args[ fieldAction ], "fast" ) == 0 )
+      {
+        ZCollector zc( ZBackupBase::deriveStorageDirFromBackupsFile( args[ fieldStorage ], true ),
+            passwords[ 0 ], threads, cacheSizeMb * 1048576 );
+        zc.gc( false );
+      }
+      else
+      if ( args.size() > 2 && strcmp( args[ fieldAction ], "deep" ) == 0 )
+      {
+        ZCollector zc( ZBackupBase::deriveStorageDirFromBackupsFile( args[ fieldStorage ], true ),
+            passwords[ 0 ], threads, cacheSizeMb * 1048576 );
+        zc.gc( true );
+      }
+      else
+      {
+        ZCollector zc( ZBackupBase::deriveStorageDirFromBackupsFile( args[ fieldStorage ], true ),
+            passwords[ 0 ], threads, cacheSizeMb * 1048576 );
+        zc.gc( false );
+      }
     }
     else
     {
