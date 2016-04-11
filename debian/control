@@ -11,7 +11,7 @@ Build-Depends: cmake (>= 2.8.2),
                libssl-dev,
                protobuf-compiler,
                zlib1g-dev
-Standards-Version: 3.9.6
+Standards-Version: 3.9.7
 Homepage: http://zbackup.org
 
 Package: zbackup
