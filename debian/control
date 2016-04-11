@@ -2,16 +2,21 @@ Source: zbackup
 Section: admin
 Priority: optional
 Maintainer: Laszlo Boszormenyi (GCS) <gcs@debian.org>
-Build-Depends: debhelper (>= 9), cmake (>= 2.8.2), libssl-dev,
- libprotobuf-dev, libprotoc-dev, protobuf-compiler, liblzma-dev, zlib1g-dev
+Build-Depends: cmake (>= 2.8.2),
+               debhelper (>= 9),
+               liblzma-dev,
+               libprotobuf-dev,
+               libprotoc-dev,
+               libssl-dev,
+               protobuf-compiler,
+               zlib1g-dev
 Standards-Version: 3.9.6
 Homepage: http://zbackup.org
-#Vcs-Git: git://git.debian.org/collab-maint/zbackup.git
-#Vcs-Browser: http://git.debian.org/?p=collab-maint/zbackup.git;a=summary
 
 Package: zbackup
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${misc:Depends},
+         ${shlibs:Depends}
 Description: Versatile deduplicating backup tool
  Uses a 64-bit modified Rabin-Karp rolling hash for data deduplication,
  and SHA256 for backup integrity check.
