@@ -17,6 +17,7 @@
 #include "static_assert.hh"
 #include "zbackup.pb.h"
 #include "encrypted_file.hh"
+#include "sptr.hh"
 
 namespace Bundle {
 
@@ -41,6 +42,8 @@ struct Id
   { return memcmp( blob, other.blob, sizeof( blob ) ) == 0; }
   bool operator != ( Id const & other ) const
   { return ! operator == ( other ); }
+  bool operator < ( Id const & other ) const
+  { return memcmp( blob, other.blob, sizeof( blob ) ) < 0; }
 };
 
 STATIC_ASSERT( sizeof( Id ) == IdSize );
@@ -64,7 +67,7 @@ public:
   DEF_EX( exDuplicateChunks, "Chunks with the same id found in a bundle", Ex )
 
   Reader( string const & fileName, EncryptionKey const & key,
-      bool prohibitProcessing = false );
+      bool keepStream = false );
 
   /// Reads the chunk into chunkData and returns true, or returns false if there
   /// was no such chunk in the bundle. chunkData may be enlarged but won't
@@ -77,7 +80,7 @@ public:
   string getPayload()
   { return payload; }
 
-  EncryptedFile::InputStream is;
+  sptr< EncryptedFile::InputStream > is;
 };
 
 /// Creates a bundle by adding chunks to it until it's full, then compressing
