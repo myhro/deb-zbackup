@@ -36,8 +36,9 @@ License: GPL-2+-openssl
  Public License version 2 can be found in "/usr/share/common-licenses/GPL-2".
 
 Files: debian/*
-Copyright: 2014 Laszlo Boszormenyi (GCS) <gcs@debian.org>,
- 2013-2014 Howard Chan <smartboyhw@gmail.com>
+Copyright: 2013-2014 Howard Chan <smartboyhw@gmail.com>,
+           2014-2016 Laszlo Boszormenyi (GCS) <gcs@debian.org>,
+           2016 Tiago Ilieve <tiago.myhro@gmail.com>
 License: GPL-2+
  This package is free software; you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
