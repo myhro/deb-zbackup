@@ -6,3 +6,8 @@ export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 
 %:
 	dh $@ --parallel --fail-missing
+
+
+override_dh_auto_build:
+	dh_auto_build
+	mkd2html README.md

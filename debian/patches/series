@@ -1,1 +1,2 @@
 fix_version_string.patch
+remove_external_travisci_img.patch

@@ -4,6 +4,7 @@ Priority: optional
 Maintainer: Laszlo Boszormenyi (GCS) <gcs@debian.org>
 Build-Depends: cmake (>= 2.8.2),
                debhelper (>= 9),
+               discount,
                liblzma-dev,
                libprotobuf-dev,
                libprotoc-dev,
