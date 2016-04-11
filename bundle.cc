@@ -1,22 +1,30 @@
-// Copyright (c) 2012-2014 Konstantin Isakov <ikm@zbackup.org>
+// Copyright (c) 2012-2014 Konstantin Isakov <ikm@zbackup.org> and ZBackup contributors, see CONTRIBUTORS
 // Part of ZBackup. Licensed under GNU GPLv2 or later + OpenSSL, see LICENSE
 
-#include <lzma.h>
 #include <stdint.h>
 
 #include "bundle.hh"
 #include "check.hh"
 #include "dir.hh"
-#include "encrypted_file.hh"
 #include "encryption.hh"
 #include "hex.hh"
 #include "message.hh"
+#include "adler32.hh"
+#include "compression.hh"
 
 namespace Bundle {
 
 enum
 {
-  FileFormatVersion = 1
+  FileFormatVersion = 1,
+
+  // This means, we don't use LZMA in this file.
+  FileFormatVersionNotLZMA,
+
+  // <- add more versions here
+
+  // This is the first version, we do not support.
+  FileFormatVersionFirstUnsupported
 };
 
 void Creator::addChunk( string const & id, void const * data, size_t size )
@@ -27,14 +35,79 @@ void Creator::addChunk( string const & id, void const * data, size_t size )
   payload.append( ( char const * ) data, size );
 }
 
+void Creator::write( std::string const & fileName, EncryptionKey const & key,
+    Reader & reader )
+{
+  EncryptedFile::OutputStream os( fileName.c_str(), key, Encryption::ZeroIv );
+
+  os.writeRandomIv();
+
+  Message::serialize( reader.getBundleHeader(), os );
+
+  Message::serialize( reader.getBundleInfo(), os );
+  os.writeAdler32();
+
+  void * bufPrev = NULL;
+  const void * bufCurr = NULL;
+  int sizePrev = 0, sizeCurr = 0;
+  bool readPrev = false, readCurr = false;
+
+  for ( ; ; )
+  {
+    bool readCurr = reader.is.Next( &bufCurr, &sizeCurr );
+
+    if ( readCurr )
+    {
+      if ( readPrev )
+      {
+        os.write( bufPrev, sizePrev );
+
+        readPrev = readCurr;
+        free( bufPrev );
+        bufPrev = malloc( sizeCurr );
+        memcpy( bufPrev, bufCurr, sizeCurr );
+        sizePrev = sizeCurr;
+      }
+      else
+      {
+        readPrev = readCurr;
+        bufPrev = malloc( sizeCurr );
+        memcpy( bufPrev, bufCurr, sizeCurr );
+        sizePrev = sizeCurr;
+      }
+    }
+    else
+    {
+      if ( readPrev )
+      {
+        sizePrev -= sizeof( Adler32::Value );
+        os.write( bufPrev, sizePrev );
+        os.writeAdler32();
+        free ( bufPrev );
+        break;
+      }
+    }
+  }
+}
+
 void Creator::write( std::string const & fileName, EncryptionKey const & key )
 {
   EncryptedFile::OutputStream os( fileName.c_str(), key, Encryption::ZeroIv );
 
   os.writeRandomIv();
 
-  FileHeader header;
-  header.set_version( FileFormatVersion );
+  BundleFileHeader header;
+
+  const_sptr<Compression::CompressionMethod> compression = Compression::CompressionMethod::defaultCompression;
+  header.set_compression_method( compression->getName() );
+
+  // The old code only support lzma, so we will bump up the version, if we're
+  // using lzma. This will make it fail cleanly.
+  if ( compression->getName() == "lzma" )
+    header.set_version( FileFormatVersion );
+  else
+    header.set_version( FileFormatVersionNotLZMA );
+
   Message::serialize( header, os );
 
   Message::serialize( info, os );
@@ -42,16 +115,9 @@ void Creator::write( std::string const & fileName, EncryptionKey const & key )
 
   // Compress
 
-  uint32_t preset = 6; // TODO: make this customizable, although 6 seems to be
-                       // the best option
-	lzma_stream strm = LZMA_STREAM_INIT;
-	lzma_ret ret;
+  sptr<Compression::EnDecoder> encoder = compression->createEncoder();
 
-  ret = lzma_easy_encoder( &strm, preset, LZMA_CHECK_CRC64 );
-  CHECK( ret == LZMA_OK, "lzma_easy_encoder error: %d", (int) ret );
-
-  strm.next_in = ( uint8_t const * ) payload.data();
-  strm.avail_in = payload.size();
+  encoder->setInput( payload.data(), payload.size() );
 
   for ( ; ; )
   {
@@ -60,46 +126,38 @@ void Creator::write( std::string const & fileName, EncryptionKey const & key )
       int size;
       if ( !os.Next( &data, &size ) )
       {
-        lzma_end( &strm );
+        encoder.reset();
         throw exBundleWriteFailed();
       }
       if ( !size )
         continue;
-      strm.next_out = ( uint8_t * ) data;
-      strm.avail_out = size;
+      encoder->setOutput( data, size );
     }
 
     // Perform the compression
-    ret = lzma_code( &strm, LZMA_FINISH );
-
-    if ( ret == LZMA_STREAM_END )
+    if ( encoder->process(true) )
     {
-      if ( strm.avail_out )
-        os.BackUp( strm.avail_out );
+      if ( encoder->getAvailableOutput() )
+        os.BackUp( encoder->getAvailableOutput() );
       break;
     }
-
-    CHECK( ret == LZMA_OK, "lzma_code error: %d", (int) ret );
   }
 
-	lzma_end( &strm );
+  encoder.reset();
 
   os.writeAdler32();
 }
 
-Reader::Reader( string const & fileName, EncryptionKey const & key )
+Reader::Reader( string const & fileName, EncryptionKey const & key, bool prohibitProcessing ):
+  is( fileName.c_str(), key, Encryption::ZeroIv )
 {
-  EncryptedFile::InputStream is( fileName.c_str(), key, Encryption::ZeroIv );
-
   is.consumeRandomIv();
 
-  FileHeader header;
   Message::parse( header, is );
 
-  if ( header.version() != FileFormatVersion )
+  if ( header.version() >= FileFormatVersionFirstUnsupported )
     throw exUnsupportedVersion();
 
-  BundleInfo info;
   Message::parse( info, is );
   is.checkAdler32();
 
@@ -109,15 +167,13 @@ Reader::Reader( string const & fileName, EncryptionKey const & key )
 
   payload.resize( payloadSize );
 
-  lzma_stream strm = LZMA_STREAM_INIT;
+  if ( prohibitProcessing )
+    return;
 
-  lzma_ret ret;
+  sptr<Compression::EnDecoder> decoder = Compression::CompressionMethod::findCompression(
+                                           header.compression_method() )->createDecoder();
 
-  ret = lzma_stream_decoder( &strm, UINT64_MAX, 0 );
-  CHECK( ret == LZMA_OK,"lzma_stream_decoder error: %d", (int) ret );
-
-  strm.next_out = ( uint8_t * ) &payload[ 0 ];
-  strm.avail_out = payload.size();
+  decoder->setOutput( &payload[ 0 ], payload.size() );
 
   for ( ; ; )
   {
@@ -126,35 +182,29 @@ Reader::Reader( string const & fileName, EncryptionKey const & key )
       int size;
       if ( !is.Next( &data, &size ) )
       {
-        lzma_end( &strm );
+        decoder.reset();
         throw exBundleReadFailed();
       }
       if ( !size )
         continue;
-      strm.next_in = ( uint8_t const * ) data;
-      strm.avail_in = size;
+      decoder->setInput( data, size );
     }
 
-    ret = lzma_code( &strm, LZMA_RUN );
-
-    if ( ret == LZMA_STREAM_END )
-    {
-      if ( strm.avail_in )
-        is.BackUp( strm.avail_in );
+    if ( decoder->process(false) ) {
+      if ( decoder->getAvailableInput() )
+        is.BackUp( decoder->getAvailableInput() );
       break;
     }
 
-    CHECK( ret == LZMA_OK, "lzma_code error: %d", (int) ret );
-
-    if ( !strm.avail_out && strm.avail_in )
+    if ( !decoder->getAvailableOutput() && decoder->getAvailableInput() )
     {
       // Apparently we have more data than we were expecting
-      lzma_end( &strm );
+      decoder.reset();
       throw exTooMuchData();
     }
   }
 
-  lzma_end( &strm );
+  decoder.reset();
 
   is.checkAdler32();
 

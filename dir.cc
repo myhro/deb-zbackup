@@ -1,4 +1,4 @@
-// Copyright (c) 2012-2014 Konstantin Isakov <ikm@zbackup.org>
+// Copyright (c) 2012-2014 Konstantin Isakov <ikm@zbackup.org> and ZBackup contributors, see CONTRIBUTORS
 // Part of ZBackup. Licensed under GNU GPLv2 or later + OpenSSL, see LICENSE
 
 #include <fcntl.h>
@@ -64,6 +64,13 @@ string getDirName( string const & path )
   std::vector< char > copy( c, c + path.size() + 1 );
 
   return dirname( copy.data() );
+}
+
+bool isDirEmpty( string const & path )
+{
+  Listing lst(path);
+  Entry tmp;
+  return !lst.getNext(tmp);
 }
 
 Listing::Listing( string const & dirName ): dirName( dirName )

@@ -1,4 +1,4 @@
-// Copyright (c) 2012-2014 Konstantin Isakov <ikm@zbackup.org>
+// Copyright (c) 2012-2014 Konstantin Isakov <ikm@zbackup.org> and ZBackup contributors, see CONTRIBUTORS
 // Part of ZBackup. Licensed under GNU GPLv2 or later + OpenSSL, see LICENSE
 
 #include "chunk_id.hh"
@@ -38,9 +38,17 @@ void ChunkId::setFromBlob( void const * data )
   rollingHash = fromLittleEndian( v );
 }
 
+bool operator <( const ChunkId &lhs, const ChunkId &rhs )
+{
+  int r = memcmp( &lhs.cryptoHash, &rhs.cryptoHash, sizeof( lhs.cryptoHash ) );
+  if ( r != 0 )
+    return r < 0;
+  return memcmp( &lhs.rollingHash, &rhs.rollingHash, sizeof( lhs.rollingHash ) ) < 0;
+}
+
 ChunkId::ChunkId( string const & blob )
 {
-  CHECK( blob.size() == BlobSize, "incorrect blob sise: %zu", blob.size() );
+  CHECK( blob.size() == BlobSize, "incorrect blob size: %zu", blob.size() );
 
   setFromBlob( blob.data() );
 }

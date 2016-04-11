@@ -1,4 +1,4 @@
-// Copyright (c) 2012-2014 Konstantin Isakov <ikm@zbackup.org>
+// Copyright (c) 2012-2014 Konstantin Isakov <ikm@zbackup.org> and ZBackup contributors, see CONTRIBUTORS
 // Part of ZBackup. Licensed under GNU GPLv2 or later + OpenSSL, see LICENSE
 
 #ifndef CHUNK_STORAGE_HH_INCLUDED__
@@ -48,9 +48,15 @@ public:
   /// in the index, does nothing and returns false
   bool add( ChunkId const &, void const * data, size_t size );
 
+  /// Adds an existing bundle to the index
+  void addBundle( BundleInfo const &, Bundle::Id const & bundleId );
+
   /// Commits all newly created bundles. Must be called before destroying the
   /// object -- otherwise all work will be removed from the temp dir and lost
   void commit();
+
+  /// Throw away all current changes.
+  void reset();
 
   ~Writer();
 

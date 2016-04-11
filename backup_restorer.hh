@@ -1,4 +1,4 @@
-// Copyright (c) 2012-2014 Konstantin Isakov <ikm@zbackup.org>
+// Copyright (c) 2012-2014 Konstantin Isakov <ikm@zbackup.org> and ZBackup contributors, see CONTRIBUTORS
 // Part of ZBackup. Licensed under GNU GPLv2 or later + OpenSSL, see LICENSE
 
 #ifndef BACKUP_RESTORER_HH_INCLUDED__
@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <exception>
 #include <string>
+#include <set>
 
 #include "chunk_storage.hh"
 #include "ex.hh"
@@ -25,9 +26,14 @@ namespace BackupRestorer {
 DEF_EX( Ex, "Backup restorer exception", std::exception )
 DEF_EX( exTooManyBytesToEmit, "A backup record asks to emit too many bytes", Ex )
 
+typedef std::set< ChunkId > ChunkSet;
+
 /// Restores the given backup
 void restore( ChunkStorage::Reader &, std::string const & backupData,
-              DataSink & );
+              DataSink *, ChunkSet * );
+
+/// Performs restore iterations on backupData
+void restoreIterations( ChunkStorage::Reader &, BackupInfo &, std::string &, ChunkSet * );
 }
 
 #endif

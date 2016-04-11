@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/zbackup/zbackup.svg)](https://travis-ci.org/zbackup/zbackup)
+
 # Introduction
 
 **zbackup** is a globally-deduplicating backup tool, based on the ideas found in [rsync](http://rsync.samba.org/).  Feed a large `.tar` into it, and it will store duplicate regions of it only once, then compress and optionally encrypt the result. Feed another `.tar` file, and it will also re-use any data found in any previous backups. This way only new changes are stored, and as long as the files are not very different, the amount of storage required is very low. Any of the backup files stored previously can be read back in full at any time. The program is format-agnostic, so you can feed virtually any files to it (any types of archives, proprietary formats, even raw disk images -- but see [Caveats](#caveats)).
@@ -8,13 +10,14 @@ This is achieved by sliding a window with a rolling hash over the input at a byt
 
 The program has the following features:
 
- * Parallel LZMA compression of the stored data
+ * Parallel LZMA or LZO compression of the stored data
  * Built-in AES encryption of the stored data
- * Possibility to delete old backup data in the future
+ * Possibility to delete old backup data
  * Use of a 64-bit rolling hash, keeping the amount of soft collisions to zero
  * Repository consists of immutable files. No existing files are ever modified
  * Written in C++ only with only modest library dependencies
  * Safe to use in production (see [below](#safety))
+ * Possibility to exchange data between repos without recompression
 
 # Build dependencies
 
@@ -22,11 +25,12 @@ The program has the following features:
  * `libssl-dev` for all encryption, hashing and random numbers
  * `libprotobuf-dev` and `protobuf-compiler` for data serialization
  * `liblzma-dev` for compression
+ * `liblzo2-dev` for compression (optional)
  * `zlib1g-dev` for adler32 calculation
 
 # Quickstart
 
-To build:
+To build and install:
 
 ```bash
 cd zbackup
@@ -35,6 +39,8 @@ make
 sudo make install
 # or just run as ./zbackup
 ```
+
+Zbackup is also part of the [Debian](https://packages.debian.org/search?keywords=zbackup), [Ubuntu](http://packages.ubuntu.com/search?keywords=zbackup) and [Arch Linux](https://aur.archlinux.org/packages/zbackup/) distributions of GNU/Linux.
 
 To use:
 
@@ -82,7 +88,6 @@ If you have a 32-bit system and a lot of cores, consider lowering the number of 
  * The only encryption mode currently implemented is `AES-128` in `CBC` mode with `PKCS#7` padding. If you believe that this is not secure enough, patches are welcome. Before you jump to conclusions however, read [this article](http://www.schneier.com/blog/archives/2009/07/another_new_aes.html).
  * The only compression mode supported is LZMA, which suits backups very nicely.
  * It's only possible to fully restore the backup in order to get to a required file, without any option to quickly pick it out. `tar` would not allow to do it anyway, but e.g. for `zip` files it could have been possible. This is possible to implement though, e.g. by exposing the data over a FUSE filesystem.
- * There's no option to delete old backup data yet. The possibility is all there, though. Someone needs to implement it (see [below](#improvements)).
  * There's no option to specify block and bundle sizes other than the default ones (currently `64k` and `2MB` respectively), though it's trivial to add command-line switches for those.
 
 Most of those limitations can be lifted by implementing the respective features.
@@ -136,13 +141,33 @@ All in all, as long as the amount of RAM permits, one can go up to several terab
   * `AES-128` in `CBC` mode with `PKCS#7` padding is used for encryption. This seems to be a reasonbly safe classic solution. Each encrypted file has a random IV as its first 16 bytes.
   * We use Google's [protocol buffers](https://developers.google.com/protocol-buffers/) to represent data structures in binary form. They are very efficient and relatively simple to use.
 
+# Compression
+
+zbackup uses LZMA to compress stored data. It compresses very well, but it will slow down your backup
+(unless you have a very fast CPU).
+
+LZO is much faster, but the files will be bigger. If you don't
+want your backup process to be cpu-bound, you should consider using LZO. However, there are some caveats:
+
+1. LZO is so fast that other parts of zbackup consume significant portions of the CPU. In fact, it is only
+   using one core on my machine because compression is the only thing that can run in parallel.
+2. I've hacked the LZO support in a day. You shouldn't trust it. Please make sure that restore works before
+   you assume that your data is safe. That may still be faster than a backup with LZMA ;-)
+3. LZMA is still the default, so make sure that you use the `--compression lzo` argument when you init the
+   repo or whenever you do a backup.
+
+You can mix LZMA and LZO in a repository. Each bundle file has a field that says how it was compressed, so
+zbackup will use the right method to decompress it. You could use an old zbackup respository with only LZMA
+bundles and start using LZO. However, please think twice before you do that because old versions of zbackup
+won't be able to read those bundles.
+
 # Improvements
 
 There's a lot to be improved in the program. It was released with the minimum amount of functionality to be useful. It is also stable. This should hopefully stimulate people to join the development and add all those other fancy features. Here's a list of ideas:
 
  * Additional options, such as configurable chunk and bundle sizes etc.
  * A command to change password.
- * A command to perform garbage collection. The program should skim through all backups and note which chunks are used by all of them. Then it should skim through all bundles and see which chunks among the ones stored were never used by the backups. If a bundle has more than *X%* of unused chunks, the remaining chunks should be transferred into brand new bundles. The old bundles should be deleted then. Once the process finishes, a new single index file with all existing chunk ids should be written, replacing all previous index files. With this command, it would become possible to remove old backups.
+ * Improved garbage collection. The program should support ability to specify maximum index file size / maximum index file count (for better compatibility with cloud storages as well) or something like retention policy.
  * A command to fsck the repo by doing something close to what garbage collection does, but also checking all hashes and so on.
  * Parallel decompression. Right now decompression is single-threaded, but it is possible to look ahead in the stream and perform prefetching.
  * Support for mounting the repo over FUSE. Random access to data would then be possible.
@@ -168,10 +193,11 @@ The author is reachable over email at <ikm@zbackup.org>. Please be constructive 
  * [rdiff-backup](http://www.nongnu.org/rdiff-backup/), based on the original `rsync` algorithm. Does not do global deduplication, only working over the files with the same file name.
  * [duplicity](http://duplicity.nongnu.org/), which looks similar to `rdiff-backup` with regards to mode of operation.
  * Some filesystems (most notably [ZFS](http://en.wikipedia.org/wiki/ZFS) and [Btrfs](http://en.wikipedia.org/wiki/Btrfs)) provide deduplication features. They do so only at block level though, without a sliding window, so they can not accomodate to arbitrary byte insertion/deletion in the middle of data.
+ * [Attic](https://attic-backup.org/), which looks very similar to zbackup.
 
 # Credits
 
-Copyright (c) 2012-2014 Konstantin Isakov (<ikm@zbackup.org>). Licensed under GNU GPLv2 or later + OpenSSL, see LICENSE.
+Copyright (c) 2012-2014 Konstantin Isakov (<ikm@zbackup.org>) and ZBackup contributors, see CONTRIBUTORS. Licensed under GNU GPLv2 or later + OpenSSL, see LICENSE.
 
 This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
 
