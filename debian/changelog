@@ -1,22 +1,25 @@
 zbackup (1.4.4-2) UNRELEASED; urgency=medium
 
   * Add myself to Uploaders.
-  * Add 'fix_version_string.patch'.
+  * Add 'fix_version_string.patch':
+    - The binary was reporting itself as '1.4.3' because upstream forgot to
+    bump the version when made a new release.
   * Bump Standards-Version to 3.9.7 (no change).
   * Convert README.md to HTML (Debian Policy Manual § 12.4 "Preferred
     documentation formats"):
     - Add 'debian/clean', update 'debian/docs'.
-    - Add 'remove_external_travisci_img.patch'.
+    - Add 'remove_external_travisci_img.patch' to avoid fetching an external
+    image when accessing the README.html.
   * debian/control:
     - Add 'discount' ('mkd2html' command) to build dependencies.
-    - wrap-and-sort.
   * debian/copyright:
     - Add myself for 'debian/*' files.
     - Bump Laszlo Boszormenyi copyright to 2016.
-    - wrap-and-sort.
+    - Removed trailing whitespaces.
   * debian/rules:
     - Add hardening (fixes 'hardening-no-pie' and 'hardening-no-bindnow').
-    - Add 'override_dh_auto_build'.
+    - Add 'override_dh_auto_build' for building the HTML documentation.
+  * wrap-and-sort the 'debian/' directory.
 
  -- Tiago Ilieve <tiago.myhro@gmail.com>  Mon, 11 Apr 2016 07:18:42 -0300
 
